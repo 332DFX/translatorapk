@@ -69,3 +69,14 @@ jobs:
           name: translatorapk-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Publish APK release
+        if: steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "build-${GITHUB_RUN_NUMBER}" \
+            app/build/outputs/apk/debug/*.apk \
+            --title "Debug build ${GITHUB_RUN_NUMBER}" \
+            --notes "Automatic build from ${GITHUB_SHA}" \
+            --prerelease
