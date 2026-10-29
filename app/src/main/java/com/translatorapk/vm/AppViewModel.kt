@@ -7,13 +7,14 @@ import androidx.lifecycle.viewModelScope
 import com.translatorapk.core.ApkAnalyzer
 import com.translatorapk.core.ApkBuilder
 import com.translatorapk.core.GoogleTranslator
-import com.translatorapk.core.PlaceholderGuard
 import com.translatorapk.core.TranslatorException
+import com.translatorapk.core.translate.TranslationCoordinator
 import com.translatorapk.data.Settings
 import com.translatorapk.data.SettingsStore
 import com.translatorapk.model.EntryFilter
 import com.translatorapk.model.EntryStatus
 import com.translatorapk.model.Screen
+import com.translatorapk.model.TranslationMode
 import com.translatorapk.model.TranslationProject
 import com.translatorapk.util.ConnectivityObserver
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val analyzer = ApkAnalyzer(application)
     private val builder = ApkBuilder(application)
+    private val coordinator = TranslationCoordinator()
     private val translator = GoogleTranslator()
     private val settingsStore = SettingsStore(application)
     private val connectivity = ConnectivityObserver(application)
@@ -111,8 +113,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(error = "Нет подключения к интернету. Подключитесь и повторите.") }
             return
         }
-        val apiKey = settings.value.apiKey
-        if (apiKey.isBlank()) {
+
+        val current = settings.value
+        val mode = TranslationMode.fromId(current.provider)
+        if (mode == TranslationMode.GOOGLE && current.apiKey.isBlank()) {
             _uiState.update {
                 it.copy(
                     error = "Добавьте ключ Google Translate в настройках",
@@ -129,43 +133,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val unique = project.entries.map { it.source }.distinct()
-                val result = mutableMapOf<String, TranslatedSource>()
-                val batches = chunk(unique)
-                var done = 0
-                var detected: String? = null
-
-                for (batch in batches) {
-                    val masked = batch.map { PlaceholderGuard.mask(it) }
-                    val response = translator.translate(
-                        texts = masked.map { it.text },
-                        source = project.sourceLang,
-                        target = project.targetLang,
-                        apiKey = apiKey
-                    )
-                    if (detected == null) detected = response.detectedLanguage
-
-                    batch.forEachIndexed { index, source ->
-                        val maskedText = response.translations.getOrNull(index) ?: return@forEachIndexed
-                        val tokens = masked[index].tokens
-                        val missing = PlaceholderGuard.missing(maskedText, tokens)
-                        val restored = PlaceholderGuard.restore(maskedText, tokens)
-                        result[source] = TranslatedSource(
-                            text = restored,
-                            warning = if (missing.isEmpty()) null else "Проверьте: ${missing.joinToString(", ")}"
-                        )
+                val response = coordinator.translate(
+                    texts = unique,
+                    source = project.sourceLang,
+                    target = project.targetLang,
+                    mode = mode,
+                    googleKey = current.apiKey,
+                    onStage = { stage ->
+                        _uiState.update { it.copy(stage = stage) }
+                    },
+                    onProgress = { done, total, provider ->
+                        _uiState.update {
+                            it.copy(
+                                stage = "$provider · $done из $total",
+                                progress = done.toFloat() / total.coerceAtLeast(1)
+                            )
+                        }
                     }
+                )
 
-                    done += batch.size
-                    _uiState.update {
-                        it.copy(
-                            stage = "Перевод ${done.coerceAtMost(unique.size)} из ${unique.size}",
-                            progress = done.toFloat() / unique.size.coerceAtLeast(1)
-                        )
-                    }
-                }
-
+                val bySource = unique.zip(response.items).toMap()
                 val updated = project.entries.map { entry ->
-                    val translated = result[entry.source]
+                    val translated = bySource[entry.source]
                     if (translated == null) {
                         entry
                     } else {
@@ -180,11 +169,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         translating = false,
-                        project = project.copy(entries = updated, detectedLanguage = detected),
-                        detectedLanguage = detected,
+                        project = project.copy(entries = updated, detectedLanguage = response.detectedLanguage),
+                        detectedLanguage = response.detectedLanguage,
                         stage = "",
                         progress = null,
-                        message = "Переведено строк: $done"
+                        message = buildString {
+                            append("Переведено строк: ")
+                            append(response.items.size)
+                            append(" · ")
+                            append(response.providerLabel)
+                            if (response.quotaFallback) {
+                                append(" (лимит MyMemory, включён ML Kit)")
+                            }
+                        }
                     )
                 }
             } catch (e: TranslatorException) {
@@ -269,6 +266,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsStore.setApiKey(value.trim()) }
     }
 
+    fun setProvider(value: String) {
+        viewModelScope.launch { settingsStore.setProvider(TranslationMode.fromId(value).id) }
+    }
+
     fun setTargetLang(value: String) {
         viewModelScope.launch { settingsStore.setTargetLang(value) }
         _uiState.value.project?.let { project ->
@@ -327,25 +328,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
     }
-
-    private fun chunk(texts: List<String>): List<List<String>> {
-        val result = mutableListOf<List<String>>()
-        var current = mutableListOf<String>()
-        var chars = 0
-        for (text in texts) {
-            if (current.isNotEmpty() && (current.size >= 40 || chars + text.length > 20_000)) {
-                result += current
-                current = mutableListOf()
-                chars = 0
-            }
-            current += text
-            chars += text.length
-        }
-        if (current.isNotEmpty()) result += current
-        return result
-    }
-
-    private data class TranslatedSource(val text: String, val warning: String?)
 
     fun resultFile(): File? = _uiState.value.resultApk?.let { File(it) }
 }

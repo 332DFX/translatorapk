@@ -43,3 +43,14 @@ data class TranslationProject(
 enum class EntryFilter { ALL, PENDING, TRANSLATED, EDITED, ERRORS }
 
 enum class Screen { HOME, PROJECT, SETTINGS }
+
+enum class TranslationMode(val id: String, val title: String, val subtitle: String) {
+    AUTO("auto", "MyMemory + ML Kit", "Бесплатно, ML Kit при лимите"),
+    MLKIT("mlkit", "ML Kit на устройстве", "Без ключа, модель скачивается"),
+    GOOGLE("google", "Google Translate", "Нужен API-ключ");
+
+    companion object {
+        fun fromId(id: String?): TranslationMode =
+            entries.firstOrNull { it.id == id } ?: AUTO
+    }
+}

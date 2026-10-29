@@ -31,6 +31,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.translatorapk.model.Screen
+import com.translatorapk.model.TranslationMode
 import com.translatorapk.ui.components.BusyOverlay
 import com.translatorapk.ui.components.OfflineBanner
 import com.translatorapk.ui.screens.HomeScreen
@@ -45,6 +46,8 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val online by vm.online.collectAsStateWithLifecycle()
+    val providerReady = TranslationMode.fromId(settings.provider) != TranslationMode.GOOGLE ||
+        settings.apiKey.isNotBlank()
     val snackbar = remember { SnackbarHostState() }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -71,7 +74,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                 when (state.screen) {
                     Screen.HOME -> HomeScreen(
                         settings = settings,
-                        hasApiKey = settings.apiKey.isNotBlank(),
+                        hasApiKey = providerReady,
                         hasProject = state.project != null,
                         onResume = { vm.selectScreen(Screen.PROJECT) },
                         onImport = {
@@ -93,7 +96,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         if (project == null) {
                             HomeScreen(
                                 settings = settings,
-                                hasApiKey = settings.apiKey.isNotBlank(),
+                                hasApiKey = providerReady,
                                 onImport = { importer.launch(arrayOf("application/vnd.android.package-archive")) },
                                 onOpenSettings = { vm.selectScreen(Screen.SETTINGS) },
                                 onSourceLang = vm::setSourceLang,
@@ -123,6 +126,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         onBack = { vm.selectScreen(Screen.HOME) },
                         onApiKey = vm::setApiKey,
                         onTestKey = vm::testApiKey,
+                        onProvider = vm::setProvider,
                         onSourceLang = vm::setSourceLang,
                         onTargetLang = vm::setTargetLang
                     )

@@ -12,7 +12,8 @@ private val Context.dataStore by preferencesDataStore(name = "translator_setting
 data class Settings(
     val apiKey: String = "",
     val targetLang: String = "ru",
-    val sourceLang: String = "auto"
+    val sourceLang: String = "auto",
+    val provider: String = "auto"
 )
 
 class SettingsStore(private val context: Context) {
@@ -21,7 +22,8 @@ class SettingsStore(private val context: Context) {
         Settings(
             apiKey = prefs[API_KEY].orEmpty(),
             targetLang = prefs[TARGET_LANG] ?: "ru",
-            sourceLang = prefs[SOURCE_LANG] ?: "auto"
+            sourceLang = prefs[SOURCE_LANG] ?: "auto",
+            provider = prefs[PROVIDER] ?: "auto"
         )
     }
 
@@ -37,9 +39,14 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[SOURCE_LANG] = value }
     }
 
+    suspend fun setProvider(value: String) {
+        context.dataStore.edit { it[PROVIDER] = value }
+    }
+
     private companion object {
         val API_KEY = stringPreferencesKey("api_key")
         val TARGET_LANG = stringPreferencesKey("target_lang")
         val SOURCE_LANG = stringPreferencesKey("source_lang")
+        val PROVIDER = stringPreferencesKey("provider")
     }
 }

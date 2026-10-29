@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.translatorapk.data.Settings
 import com.translatorapk.model.SOURCE_LANGUAGES
 import com.translatorapk.model.TARGET_LANGUAGES
+import com.translatorapk.model.TranslationMode
 import com.translatorapk.model.languageLabel
 import com.translatorapk.ui.components.LanguagePicker
 
@@ -61,6 +62,9 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val mode = TranslationMode.fromId(settings.provider)
+    val needsGoogleKey = mode == TranslationMode.GOOGLE && !hasApiKey
+    val ready = !needsGoogleKey
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -258,8 +262,8 @@ fun HomeScreen(
 
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = if (hasApiKey) colors.surface else colors.errorContainer,
-                contentColor = if (hasApiKey) colors.onSurface else colors.onErrorContainer
+                color = if (ready) colors.surface else colors.errorContainer,
+                contentColor = if (ready) colors.onSurface else colors.onErrorContainer
             ) {
                 Row(
                     modifier = Modifier
@@ -269,26 +273,32 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.Key,
+                        imageVector = if (mode == TranslationMode.GOOGLE) Icons.Rounded.Key else Icons.Rounded.Translate,
                         contentDescription = null,
-                        tint = if (hasApiKey) colors.secondary else colors.onErrorContainer
+                        tint = if (ready) colors.secondary else colors.onErrorContainer
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (hasApiKey) "Ключ Google Translate подключён" else "Нужен ключ Google Translate",
+                            text = when {
+                                needsGoogleKey -> "Нужен ключ Google Translate"
+                                mode == TranslationMode.AUTO -> "MyMemory + ML Kit"
+                                mode == TranslationMode.MLKIT -> "ML Kit на устройстве"
+                                else -> "Google Translate подключён"
+                            },
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = if (hasApiKey) {
-                                "Используется Cloud Translation API"
-                            } else {
-                                "Добавьте ключ в настройках, чтобы переводить текст"
+                            text = when {
+                                needsGoogleKey -> "Добавьте ключ в настройках, чтобы переводить текст"
+                                mode == TranslationMode.AUTO -> "Без ключа · при лимите ML Kit включается сам"
+                                mode == TranslationMode.MLKIT -> "Без ключа · модель скачивается один раз"
+                                else -> "Используется Cloud Translation API"
                             },
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                     TextButton(onClick = onOpenSettings) {
-                        Text(if (hasApiKey) "Изменить" else "Добавить")
+                        Text("Настроить")
                     }
                 }
             }
@@ -300,7 +310,7 @@ fun HomeScreen(
                     color = colors.onBackground
                 )
                 StepRow("1", "Импорт", "APK распаковывается и анализируется: движок, файлы, строки.")
-                StepRow("2", "Перевод", "Google Translate переводит пакетами с защитой плейсхолдеров.")
+                StepRow("2", "Перевод", "MyMemory, при лимите — ML Kit на устройстве. Плейсхолдеры защищены.")
                 StepRow("3", "Правки", "Каждую строку можно отредактировать в карточке.")
                 StepRow("4", "Сборка", "Новый APK собирается, подписывается и сохраняется.")
             }

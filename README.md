@@ -10,7 +10,9 @@ MVP в разработке. Текущая версия умеет:
 
 - импортировать APK и определять движок (Android, Godot, Unity, Unreal, Generic);
 - извлекать текст из JSON, CSV/TSV и текстовых файлов внутри APK;
-- переводить через Google Cloud Translation API v2 (NMT, без LLM);
+- переводить через MyMemory без ключа, а при исчерпании дневного лимита автоматически
+  продолжать на устройстве через ML Kit (NMT, без LLM);
+- по желанию использовать Google Cloud Translation API v2;
 - защищать плейсхолдеры (`%s`, `{0}`, `{name}`, HTML-теги);
 - показывать строки карточками с редактированием, фильтрами и поиском;
 - собирать новый APK, подписывать постоянным ключом приложения и делиться файлом;
@@ -18,7 +20,7 @@ MVP в разработке. Текущая версия умеет:
 
 Ограничения текущей версии:
 
-- `resources.arsc` (обычные Android-строки) пока не изменяется — нужен apktool-пайплайн;
+- `resources.arsc` (обычные Android-строки) пока не изменяется — следующий этап;
 - содержимое Godot PCK, Unreal `.locres/.pak`, Unity AssetBundle/IL2CPP не изменяется;
 - строки в коде, картинках и шрифтах без кириллицы не обрабатываются;
 - пересобранный APK подписан новым ключом: установка поверх оригинала может потребовать
@@ -35,7 +37,18 @@ MVP в разработке. Текущая версия умеет:
 gradle :app:assembleDebug
 ```
 
-## Ключ Google Translate
+## Движки перевода
+
+По умолчанию выбран режим **MyMemory + ML Kit**:
+
+1. строки по одной переводятся через бесплатный MyMemory API (ключ не нужен);
+2. когда дневной лимит заканчивается, оставшиеся строки переводит ML Kit на телефоне;
+3. при первом использовании ML Kit скачивает языковую модель (нужен интернет).
+
+Можно выбрать **ML Kit** (только на устройстве) или **Google Translate** (нужен ключ).
+Отдельного ключа для MyMemory и ML Kit не требуется.
+
+## Ключ Google Translate (необязательно)
 
 1. `console.cloud.google.com` → создать проект.
 2. Привязать billing account.
@@ -50,7 +63,10 @@ gradle :app:assembleDebug
 
 - `core/ApkAnalyzer` — импорт, определение движка, извлечение строк.
 - `core/TextCodec` — разбор и обратная сборка JSON/CSV/текстовых файлов.
-- `core/GoogleTranslator` — Google Translation API v2.
+- `core/translate/TranslationCoordinator` — MyMemory → ML Kit, прогресс и фолбэк.
+- `core/translate/MyMemoryTranslator` — бесплатный MyMemory API.
+- `core/translate/MlKitTranslator` — офлайн-перевод ML Kit и определение языка.
+- `core/GoogleTranslator` — Google Translation API v2 (опционально).
 - `core/PlaceholderGuard` — защита плейсхолдеров при переводе.
 - `core/ApkBuilder`, `core/ApkSignerUtil` — пересборка и подпись APK.
 - `vm/AppViewModel` — состояние, перевод, сборка.
