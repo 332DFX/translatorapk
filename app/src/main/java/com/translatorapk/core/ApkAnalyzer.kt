@@ -66,7 +66,7 @@ class ApkAnalyzer(private val context: Context) {
                 val bytes = runCatching { zip.getInputStream(zipEntry).use { it.readBytes() } }.getOrNull() ?: continue
                 if (!TextCodec.isProbablyText(bytes)) continue
                 val text = runCatching { bytes.toString(Charsets.UTF_8) }.getOrNull() ?: continue
-                val parsed = runCatching { TextCodec.parse(kind, text) }.getOrElse { continue }
+                val parsed = runCatching { TextCodec.parse(kind, text) }.getOrNull() ?: continue
                 for (item in parsed) {
                     if (total >= MAX_ENTRIES) break
                     total++

@@ -21,7 +21,7 @@ data class BatchTranslation(
 )
 
 class GoogleTranslator(
-    private val client: OkHttpClient = defaultClient()
+    private val client: OkHttpClient = defaultHttpClient()
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -130,11 +130,12 @@ class GoogleTranslator(
         .replace("&gt;", ">")
         .replace("&amp;", "&")
 
-    private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
 }
+
+private fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    .connectTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(60, TimeUnit.SECONDS)
+    .writeTimeout(30, TimeUnit.SECONDS)
+    .build()
 
 class TranslatorException(message: String) : Exception(message)
