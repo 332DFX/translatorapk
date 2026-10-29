@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.translatorapk.model.AnalysisNote
+import com.translatorapk.core.engines.EngineRegistry
 import com.translatorapk.model.EngineType
 import com.translatorapk.model.EntryKind
 import com.translatorapk.model.EntryStatus
@@ -39,33 +40,11 @@ class ApkAnalyzer(private val context: Context) {
 
         ZipFile(file).use { zip ->
             val names = zip.entries().asSequence().map { it.name }.toList()
-            engine = detectEngine(names)
+            val adapter = EngineRegistry.detect(names)
+            engine = adapter.type
             onStage("Движок: ${engine.title}")
-
-            if (engine == EngineType.NATIVE) {
-                notes += AnalysisNote(
-                    NoteLevel.WARNING,
-                    "Строки в resources.arsc (обычные res/values) в этой версии не изменяются. " +
-                        "Переводимые текстовые assets обрабатываются, но для полного перевода нужен apktool-пайплайн."
-                )
-            }
-            if (engine == EngineType.UNITY) {
-                notes += AnalysisNote(
-                    NoteLevel.WARNING,
-                    "Unity AssetBundle и IL2CPP пока не изменяются. Обрабатываются только текстовые ассеты (JSON/CSV/TXT)."
-                )
-            }
-            if (engine == EngineType.GODOT) {
-                notes += AnalysisNote(
-                    NoteLevel.WARNING,
-                    "Файлы внутри PCK пока не распаковываются. Обрабатываются только текстовые файлы вне PCK."
-                )
-            }
-            if (engine == EngineType.UNREAL) {
-                notes += AnalysisNote(
-                    NoteLevel.WARNING,
-                    "Бинарные .locres/.pak пока не изменяются. Обрабатываются только текстовые файлы."
-                )
+            adapter.limitation()?.let { limitation ->
+                notes += AnalysisNote(NoteLevel.WARNING, limitation)
             }
 
             val candidates = names.filter { name ->
@@ -127,17 +106,6 @@ class ApkAnalyzer(private val context: Context) {
             entries = entries,
             notes = notes
         )
-    }
-
-    private fun detectEngine(names: List<String>): EngineType {
-        return when {
-            names.any { it.endsWith(".pck") || it.contains("libgodot", ignoreCase = true) } -> EngineType.GODOT
-            names.any { it.startsWith("assets/bin/Data/") || it.endsWith("libunity.so") } -> EngineType.UNITY
-            names.any { it.endsWith(".locres") || it.endsWith(".pak") || it.endsWith(".utoc") || it.endsWith(".ucas") } -> EngineType.UNREAL
-            names.contains("resources.arsc") -> EngineType.NATIVE
-            names.contains("classes.dex") -> EngineType.NATIVE
-            else -> EngineType.GENERIC
-        }
     }
 
     private fun kindFor(name: String): EntryKind? = when (name.substringAfterLast('.', "").lowercase()) {

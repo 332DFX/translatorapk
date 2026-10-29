@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +52,8 @@ import com.translatorapk.ui.components.LanguagePicker
 fun HomeScreen(
     settings: Settings,
     hasApiKey: Boolean,
+    hasProject: Boolean = false,
+    onResume: () -> Unit = {},
     onImport: () -> Unit,
     onOpenSettings: () -> Unit,
     onSourceLang: (String) -> Unit,
@@ -218,6 +221,37 @@ fun HomeScreen(
                         Icon(Icons.Rounded.FileOpen, contentDescription = null)
                         Spacer(Modifier.width(10.dp))
                         Text("Выбрать APK", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+
+            if (hasProject) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = colors.primaryContainer,
+                    contentColor = colors.onPrimaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Rounded.Translate, contentDescription = null)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Проект в работе",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Продолжите редактирование и сборку",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        FilledTonalButton(onClick = onResume) {
+                            Text("Продолжить")
+                        }
                     }
                 }
             }

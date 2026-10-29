@@ -72,6 +72,8 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     Screen.HOME -> HomeScreen(
                         settings = settings,
                         hasApiKey = settings.apiKey.isNotBlank(),
+                        hasProject = state.project != null,
+                        onResume = { vm.selectScreen(Screen.PROJECT) },
                         onImport = {
                             importer.launch(
                                 arrayOf(

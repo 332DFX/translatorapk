@@ -1,0 +1,66 @@
+package com.translatorapk.core.engines
+
+import com.translatorapk.model.EngineType
+
+interface EngineAdapter {
+    val type: EngineType
+    fun matches(entries: List<String>): Boolean
+    fun limitation(): String? = null
+}
+
+object GodotEngine : EngineAdapter {
+    override val type = EngineType.GODOT
+    override fun matches(entries: List<String>): Boolean =
+        entries.any { it.endsWith(".pck") || it.contains("libgodot", ignoreCase = true) }
+
+    override fun limitation() =
+        "Файлы внутри PCK пока не распаковываются. Обрабатываются только текстовые файлы вне PCK."
+}
+
+object UnityEngine : EngineAdapter {
+    override val type = EngineType.UNITY
+    override fun matches(entries: List<String>): Boolean =
+        entries.any { it.startsWith("assets/bin/Data/") || it.endsWith("libunity.so") }
+
+    override fun limitation() =
+        "Unity AssetBundle и IL2CPP пока не изменяются. Обрабатываются только текстовые ассеты (JSON/CSV/TXT)."
+}
+
+object UnrealEngine : EngineAdapter {
+    override val type = EngineType.UNREAL
+    override fun matches(entries: List<String>): Boolean =
+        entries.any {
+            it.endsWith(".locres") || it.endsWith(".pak") || it.endsWith(".utoc") || it.endsWith(".ucas")
+        }
+
+    override fun limitation() =
+        "Бинарные .locres/.pak пока не изменяются. Обрабатываются только текстовые файлы."
+}
+
+object NativeAndroidEngine : EngineAdapter {
+    override val type = EngineType.NATIVE
+    override fun matches(entries: List<String>): Boolean =
+        entries.contains("resources.arsc") || entries.contains("classes.dex")
+
+    override fun limitation() =
+        "Строки в resources.arsc (обычные res/values) в этой версии не изменяются. " +
+            "Переводимые текстовые assets обрабатываются, но для полного перевода нужен apktool-пайплайн."
+}
+
+object GenericEngine : EngineAdapter {
+    override val type = EngineType.GENERIC
+    override fun matches(entries: List<String>): Boolean = true
+}
+
+object EngineRegistry {
+    private val adapters: List<EngineAdapter> = listOf(
+        GodotEngine,
+        UnityEngine,
+        UnrealEngine,
+        NativeAndroidEngine,
+        GenericEngine
+    )
+
+    fun detect(entries: List<String>): EngineAdapter =
+        adapters.firstOrNull { it.matches(entries) } ?: GenericEngine
+}
