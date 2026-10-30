@@ -37,7 +37,8 @@ data class TranslationProject(
     val targetLang: String,
     val entries: List<TextEntry>,
     val notes: List<AnalysisNote>,
-    val detectedLanguage: String? = null
+    val detectedLanguage: String? = null,
+    val fontPaths: List<String> = emptyList()
 )
 
 enum class EntryFilter { ALL, PENDING, TRANSLATED, EDITED, ERRORS }

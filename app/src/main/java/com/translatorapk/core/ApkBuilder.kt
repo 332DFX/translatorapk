@@ -21,6 +21,7 @@ class ApkBuilder(private val context: Context) {
         val byFile = project.entries
             .filter { it.translation.isNotBlank() }
             .groupBy { it.filePath }
+        val fonts = project.fontPaths.toSet()
 
         ZipFile(original).use { zip ->
             val total = zip.size().coerceAtLeast(1)
@@ -29,7 +30,9 @@ class ApkBuilder(private val context: Context) {
                 for (entry in zip.entries()) {
                     if (entry.isDirectory) continue
                     val changed = byFile[entry.name]
-                    val bytes = if (changed != null) {
+                    val bytes = if (entry.name in fonts) {
+                        fontBytes(entry.name)
+                    } else if (changed != null) {
                         val original = zip.getInputStream(entry).use { it.readBytes() }
                         if (entry.name == "resources.arsc") {
                             val translations = changed.mapNotNull { item ->
@@ -75,5 +78,20 @@ class ApkBuilder(private val context: Context) {
             unsigned.delete()
         }
         return signed
+    }
+
+    private fun fontBytes(name: String): ByteArray {
+        val lower = name.lowercase()
+        val file = when {
+            lower.contains("bold") && (lower.contains("italic") || lower.contains("oblique")) ->
+                "NotoSans-BoldItalic.ttf"
+            lower.contains("bold") || lower.contains("black") || lower.contains("heavy") ||
+                lower.contains("semibold") || lower.contains("demibold") ->
+                "NotoSans-Bold.ttf"
+            lower.contains("italic") || lower.contains("oblique") ->
+                "NotoSans-Italic.ttf"
+            else -> "NotoSans-Regular.ttf"
+        }
+        return context.assets.open("fonts/$file").use { it.readBytes() }
     }
 }

@@ -22,7 +22,8 @@ MVP в разработке. Текущая версия умеет:
 
 - `resources.arsc` (обычные Android-строки) пока не изменяется — следующий этап;
 - содержимое Godot PCK, Unreal `.locres/.pak`, Unity AssetBundle/IL2CPP не изменяется;
-- строки в коде, картинках и шрифтах без кириллицы не обрабатываются;
+- шрифты без кириллицы в assets/res/font заменяются на встроенный Noto Sans;
+- строки в коде и картинках пока не обрабатываются;
 - пересобранный APK подписан новым ключом: установка поверх оригинала может потребовать
   удаления исходного приложения.
 
@@ -68,6 +69,8 @@ gradle :app:assembleDebug
 - `core/translate/MlKitTranslator` — офлайн-перевод ML Kit и определение языка.
 - `core/GoogleTranslator` — Google Translation API v2 (опционально).
 - `core/PlaceholderGuard` — защита плейсхолдеров при переводе.
+- `core/ArscEditor` — извлечение и замена строк `resources.arsc`.
+- `core/FontInspector` — поиск шрифтов без кириллицы, замена на Noto Sans.
 - `core/ApkBuilder`, `core/ApkSignerUtil` — пересборка и подпись APK.
 - `vm/AppViewModel` — состояние, перевод, сборка.
 - `ui/` — Compose Material 3 интерфейс.

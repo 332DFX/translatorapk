@@ -36,6 +36,7 @@ class ApkAnalyzer(private val context: Context) {
         onStage("Чтение APK")
         val entries = mutableListOf<TextEntry>()
         val notes = mutableListOf<AnalysisNote>()
+        val fontPaths = mutableListOf<String>()
         var engine = EngineType.UNKNOWN
 
         ZipFile(file).use { zip ->
@@ -80,6 +81,28 @@ class ApkAnalyzer(private val context: Context) {
                     )
                 }
             }
+            if (targetLang in CYRILLIC_TARGETS) {
+                onStage("Проверка шрифтов")
+                for (name in names) {
+                    if (!name.endsWith(".ttf", true) && !name.endsWith(".otf", true)) continue
+                    if (iconLike(name)) continue
+                    val font = zip.getEntry(name) ?: continue
+                    if (font.size !in 1L..MAX_FONT_BYTES) continue
+                    val fontBytes = runCatching {
+                        zip.getInputStream(font).use { it.readBytes() }
+                    }.getOrNull() ?: continue
+                    if (FontInspector.missingCyrillic(fontBytes)) {
+                        fontPaths += name
+                    }
+                }
+                if (fontPaths.isNotEmpty()) {
+                    notes += AnalysisNote(
+                        NoteLevel.INFO,
+                        "Шрифтов без кириллицы: ${fontPaths.size}. Они будут заменены на Noto Sans."
+                    )
+                }
+            }
+
             val arsc = zip.getEntry("resources.arsc")
             if (arsc != null && total < MAX_ENTRIES && arsc.size in 1L..MAX_ARSC_BYTES) {
                 onStage("Разбор resources.arsc")
@@ -134,8 +157,17 @@ class ApkAnalyzer(private val context: Context) {
             sourceLang = sourceLang?.takeUnless { it == "auto" },
             targetLang = targetLang,
             entries = entries,
-            notes = notes
+            notes = notes,
+            fontPaths = fontPaths
         )
+    }
+
+    private fun iconLike(name: String): Boolean {
+        val lower = name.lowercase()
+        return listOf(
+            "icon", "awesome", "material", "glyph", "symbol", "emoji",
+            "fontello", "icomoon", "fa-", "brands", "social"
+        ).any { lower.contains(it) }
     }
 
     private fun kindFor(name: String): EntryKind? = when (name.substringAfterLast('.', "").lowercase()) {
@@ -156,6 +188,8 @@ class ApkAnalyzer(private val context: Context) {
     private companion object {
         const val MAX_FILE_BYTES = 2 * 1024 * 1024L
         const val MAX_ARSC_BYTES = 32 * 1024 * 1024L
+        const val MAX_FONT_BYTES = 12 * 1024 * 1024L
         const val MAX_ENTRIES = 6000
+        val CYRILLIC_TARGETS = setOf("ru", "uk", "be", "bg", "sr", "mk", "kk", "ky", "tg", "mn")
     }
 }
