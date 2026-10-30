@@ -133,6 +133,54 @@ class ApkAnalyzer(private val context: Context) {
                 }
             }
 
+            if (engine == EngineType.UNITY && total < MAX_ENTRIES) {
+                onStage("Разбор Unity TextAsset")
+                var unityFiles = 0
+                var unityStrings = 0
+                val unityCandidates = names.filter { looksLikeUnitySerialized(it) }
+                for (name in unityCandidates) {
+                    if (total >= MAX_ENTRIES) break
+                    val unityEntry = zip.getEntry(name) ?: continue
+                    if (unityEntry.size !in 1L..MAX_UNITY_BYTES) continue
+                    val unityBytes = runCatching {
+                        zip.getInputStream(unityEntry).use { it.readBytes() }
+                    }.getOrNull() ?: continue
+                    val extracted = runCatching {
+                        UnityAsset.extract(unityBytes, MAX_ENTRIES - total)
+                    }.getOrNull() ?: continue
+                    if (extracted.isNotEmpty()) unityFiles++
+                    for (asset in extracted) {
+                        for (item in asset.items) {
+                            if (total >= MAX_ENTRIES) break
+                            total++
+                            unityStrings++
+                            entries += TextEntry(
+                                id = "unity://$name!${asset.pathId}::${item.key}",
+                                filePath = "unity://$name!${asset.pathId}",
+                                key = item.key,
+                                source = item.text,
+                                kind = asset.kind,
+                                status = EntryStatus.PENDING
+                            )
+                        }
+                    }
+                }
+                if (unityStrings > 0) {
+                    notes += AnalysisNote(
+                        NoteLevel.INFO,
+                        "Unity TextAsset: файлов $unityFiles, строк $unityStrings."
+                    )
+                }
+                val hasBundle = names.any { it.endsWith("data.unity3d") || it.endsWith(".bundle") }
+                if (hasBundle) {
+                    notes += AnalysisNote(
+                        NoteLevel.WARNING,
+                        "AssetBundle/data.unity3d пока не изменяются. " +
+                            "Переводятся только TextAsset в несжатых serialized-файлах."
+                    )
+                }
+            }
+
             val pckNames = names.filter { it.endsWith(".pck", true) }
             for (pckName in pckNames) {
                 if (total >= MAX_ENTRIES) break
@@ -210,6 +258,20 @@ class ApkAnalyzer(private val context: Context) {
         )
     }
 
+    private fun looksLikeUnitySerialized(name: String): Boolean {
+        if (!name.startsWith("assets/bin/Data/")) return false
+        val base = name.substringAfterLast('/')
+        if (base.endsWith(".resource") || base.endsWith(".resS") ||
+            base.endsWith(".unity3d") || base.endsWith(".bundle")
+        ) return false
+        return base.endsWith(".assets") ||
+            base == "globalgamemanagers" ||
+            base == "globalgamemanagers.assets" ||
+            base.startsWith("level") ||
+            base.contains("sharedassets") ||
+            base.endsWith(".serialized")
+    }
+
     private fun iconLike(name: String): Boolean {
         val lower = name.lowercase()
         return listOf(
@@ -238,6 +300,7 @@ class ApkAnalyzer(private val context: Context) {
         const val MAX_ARSC_BYTES = 32 * 1024 * 1024L
         const val MAX_FONT_BYTES = 12 * 1024 * 1024L
         const val MAX_PCK_BYTES = 96 * 1024 * 1024L
+        const val MAX_UNITY_BYTES = 96 * 1024 * 1024L
         const val MAX_ENTRIES = 6000
         val CYRILLIC_TARGETS = setOf("ru", "uk", "be", "bg", "sr", "mk", "kk", "ky", "tg", "mn")
     }

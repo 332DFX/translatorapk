@@ -10,6 +10,9 @@ MVP в разработке. Текущая версия умеет:
 
 - импортировать APK и определять движок (Android, Godot, Unity, Unreal, Generic);
 - извлекать текст из JSON, CSV/TSV и текстовых файлов внутри APK;
+- переводить строки `resources.arsc` (обычные Android-строки);
+- переводить TextAsset в несжатых Unity serialized-файлах (`assets/bin/Data`);
+- переводить текстовые файлы внутри Godot PCK и пересобирать PCK;
 - переводить через MyMemory без ключа, а при исчерпании дневного лимита автоматически
   продолжать на устройстве через ML Kit (NMT, без LLM);
 - по желанию использовать Google Cloud Translation API v2;
@@ -20,8 +23,10 @@ MVP в разработке. Текущая версия умеет:
 
 Ограничения текущей версии:
 
-- `resources.arsc` (обычные Android-строки) пока не изменяется — следующий этап;
-- содержимое Godot PCK, Unreal `.locres/.pak`, Unity AssetBundle/IL2CPP не изменяется;
+- в `resources.arsc` заменяются только строки default-конфигурации: плюралы, массивы
+  и отдельные `values-ru` пока не создаются;
+- бинарные Godot `.translation`, Unreal `.locres/.pak`, Unity AssetBundle (`data.unity3d`)
+  и IL2CPP не изменяются;
 - шрифты без кириллицы в assets/res/font заменяются на встроенный Noto Sans;
 - строки в коде и картинках пока не обрабатываются;
 - пересобранный APK подписан новым ключом: установка поверх оригинала может потребовать
@@ -70,6 +75,8 @@ gradle :app:assembleDebug
 - `core/GoogleTranslator` — Google Translation API v2 (опционально).
 - `core/PlaceholderGuard` — защита плейсхолдеров при переводе.
 - `core/ArscEditor` — извлечение и замена строк `resources.arsc`.
+- `core/UnityAsset` — разбор Unity serialized-файлов и пересборка TextAsset.
+- `core/GodotPck` — разбор и пересборка Godot PCK.
 - `core/FontInspector` — поиск шрифтов без кириллицы, замена на Noto Sans.
 - `core/ApkBuilder`, `core/ApkSignerUtil` — пересборка и подпись APK.
 - `vm/AppViewModel` — состояние, перевод, сборка.

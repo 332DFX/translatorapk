@@ -24,7 +24,8 @@ object UnityEngine : EngineAdapter {
         entries.any { it.startsWith("assets/bin/Data/") || it.endsWith("libunity.so") }
 
     override fun limitation() =
-        "Unity AssetBundle и IL2CPP пока не изменяются. Обрабатываются только текстовые ассеты (JSON/CSV/TXT)."
+        "TextAsset в несжатых serialized-файлах переводятся и пересобираются. " +
+            "AssetBundle (data.unity3d) и IL2CPP пока не изменяются."
 }
 
 object UnrealEngine : EngineAdapter {
