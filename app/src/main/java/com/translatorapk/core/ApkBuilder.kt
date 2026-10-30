@@ -12,7 +12,13 @@ import java.util.zip.ZipOutputStream
 
 class ApkBuilder(private val context: Context) {
 
-    fun build(project: TranslationProject, onProgress: (Float) -> Unit): File {
+    data class BuildResult(val file: File, val packageName: String?)
+
+    fun build(
+        project: TranslationProject,
+        renamePackage: Boolean = false,
+        onProgress: (Float) -> Unit
+    ): BuildResult {
         val original = File(project.apkPath)
         if (!original.exists()) throw IllegalStateException("Исходный APK не найден")
 
@@ -29,6 +35,7 @@ class ApkBuilder(private val context: Context) {
             .filter { it.filePath.startsWith("unity://") }
             .groupBy { it.filePath.removePrefix("unity://").substringBeforeLast("!") }
         val fonts = project.fontPaths.toSet()
+        var builtPackage = project.packageName
 
         ZipFile(original).use { zip ->
             val total = zip.size().coerceAtLeast(1)
@@ -39,7 +46,15 @@ class ApkBuilder(private val context: Context) {
                     val pckChanged = pckGroups[entry.name]
                     val unityChanged = unityGroups[entry.name]
                     val changed = byFile[entry.name]
-                    val bytes = if (entry.name in fonts) {
+                    val bytes = if (entry.name == "AndroidManifest.xml" && renamePackage) {
+                        val originalBytes = zip.getInputStream(entry).use { it.readBytes() }
+                        val oldPackage = project.packageName
+                            ?: throw IllegalStateException("Не удалось определить package name")
+                        val renamed = ManifestEditor.renamePackage(originalBytes, ".translated")
+                            ?: throw IllegalStateException("Не удалось изменить package name в AndroidManifest.xml")
+                        builtPackage = renamed.newPackage
+                        renamed.bytes
+                    } else if (entry.name in fonts) {
                         fontBytes(entry.name)
                     } else if (unityChanged != null) {
                         val original = zip.getInputStream(entry).use { it.readBytes() }
@@ -85,14 +100,15 @@ class ApkBuilder(private val context: Context) {
         }
 
         val baseName = project.apkName.removeSuffix(".apk").ifBlank { "app" }
-        val signed = File(outputDir, "$baseName-${project.targetLang}.apk")
+        val suffix = if (renamePackage) "-translated" else ""
+        val signed = File(outputDir, "$baseName-${project.targetLang}$suffix.apk")
         signed.delete()
         try {
             ApkSignerUtil.sign(context, unsigned, signed)
         } finally {
             unsigned.delete()
         }
-        return signed
+        return BuildResult(signed, builtPackage)
     }
 
     private fun fontBytes(name: String): ByteArray {

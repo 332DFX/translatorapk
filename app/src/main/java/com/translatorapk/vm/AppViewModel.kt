@@ -39,6 +39,8 @@ data class UiState(
     val error: String? = null,
     val message: String? = null,
     val resultApk: String? = null,
+    val resultPackage: String? = null,
+    val separateInstall: Boolean = false,
     val filter: EntryFilter = EntryFilter.ALL,
     val query: String = "",
     val detectedLanguage: String? = null
@@ -221,6 +223,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(query = query) }
     }
 
+    fun setSeparateInstall(value: Boolean) {
+        _uiState.update { it.copy(separateInstall = value) }
+    }
+
     fun compile() {
         val project = _uiState.value.project ?: return
         if (_uiState.value.compiling) return
@@ -234,7 +240,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val output = withContext(Dispatchers.IO) {
-                    builder.build(project) { progress ->
+                    builder.build(project, _uiState.value.separateInstall) { progress ->
                         _uiState.update {
                             it.copy(stage = "Сборка и подпись", progress = progress)
                         }
@@ -245,7 +251,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         compiling = false,
                         stage = "",
                         progress = null,
-                        resultApk = output.absolutePath,
+                        resultApk = output.file.absolutePath,
+                        resultPackage = output.packageName,
                         message = "APK собран и подписан"
                     )
                 }
@@ -324,7 +331,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 screen = Screen.HOME,
                 filter = EntryFilter.ALL,
                 query = "",
-                detectedLanguage = null
+                detectedLanguage = null,
+                resultPackage = null
             )
         }
     }

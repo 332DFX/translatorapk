@@ -105,6 +105,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         } else {
                             ProjectScreen(
                                 project = project,
+                                separateInstall = state.separateInstall,
                                 filter = state.filter,
                                 query = state.query,
                                 translating = state.translating,
@@ -114,6 +115,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                                 onBack = { vm.selectScreen(Screen.HOME) },
                                 onTranslate = vm::translateAll,
                                 onCompile = vm::compile,
+                                onSeparateInstall = vm::setSeparateInstall,
                                 onFilter = vm::setFilter,
                                 onQuery = vm::setQuery,
                                 onEdit = vm::updateTranslation
@@ -155,9 +157,22 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             title = { Text("APK готов") },
             text = {
                 Text(
-                    text = "Файл собран и подписан:\n\n${File(path).name}\n\n" +
-                        "Подпись отличается от оригинала, поэтому перед установкой может " +
-                        "потребоваться удалить исходное приложение.",
+                    text = buildString {
+                        append("Файл собран и подписан:\n\n")
+                        append(File(path).name)
+                        append("\n\n")
+                        if (!state.resultPackage.isNullOrBlank()) {
+                            append("Package: ")
+                            append(state.resultPackage)
+                            append("\n\n")
+                        }
+                        if (state.separateInstall) {
+                            append("Версия устанавливается отдельно от original и не заменяет его.")
+                        } else {
+                            append("Подпись отличается от оригинала, поэтому перед установкой может ")
+                            append("потребоваться удалить исходное приложение.")
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium
                 )
             },

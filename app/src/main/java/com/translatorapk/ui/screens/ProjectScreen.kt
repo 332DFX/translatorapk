@@ -1,20 +1,26 @@
 package com.translatorapk.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,15 +40,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import com.translatorapk.model.EntryFilter
 import com.translatorapk.model.EntryStatus
 import com.translatorapk.model.NoteLevel
@@ -55,6 +74,7 @@ import com.translatorapk.ui.components.StringCard
 @Composable
 fun ProjectScreen(
     project: TranslationProject,
+    separateInstall: Boolean,
     filter: EntryFilter,
     query: String,
     translating: Boolean,
@@ -64,12 +84,14 @@ fun ProjectScreen(
     onBack: () -> Unit,
     onTranslate: () -> Unit,
     onCompile: () -> Unit,
+    onSeparateInstall: (Boolean) -> Unit,
     onFilter: (EntryFilter) -> Unit,
     onQuery: (String) -> Unit,
     onEdit: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val listState = rememberLazyListState()
     val translatedCount = project.entries.count { it.translation.isNotBlank() }
     val total = project.entries.size
     val filtered = remember(project.entries, filter, query) {
@@ -136,6 +158,31 @@ fun ProjectScreen(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Установить отдельно",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = project.packageName?.let { "$it.translated" }
+                                    ?: "package name не определён",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Switch(
+                            checked = separateInstall,
+                            onCheckedChange = onSeparateInstall,
+                            enabled = project.packageName != null && !compiling && !translating
+                        )
+                    }
                     if (translating || compiling) {
                         LinearProgressIndicator(
                             progress = { progress?.coerceIn(0f, 1f) ?: 0f },
@@ -184,10 +231,14 @@ fun ProjectScreen(
             }
         }
     ) { padding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+        ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
@@ -333,5 +384,84 @@ fun ProjectScreen(
                 )
             }
         }
+        FastScrollbar(
+            listState = listState,
+            itemCount = filtered.size + 4,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(vertical = 8.dp, horizontal = 4.dp)
+        )
+        }
+    }
+}
+
+@Composable
+private fun FastScrollbar(
+    listState: LazyListState,
+    itemCount: Int,
+    modifier: Modifier = Modifier
+) {
+    if (itemCount < 8) return
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val thumbHeight = with(density) { 46.dp.toPx() }
+    var trackHeight by remember { mutableIntStateOf(1) }
+    var dragging by remember { mutableStateOf(false) }
+    val maxIndex = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(itemCount - 1)
+    val fraction = (listState.firstVisibleItemIndex.toFloat() / maxIndex.coerceAtLeast(1))
+        .coerceIn(0f, 1f)
+
+    fun jump(y: Float) {
+        val travel = (trackHeight - thumbHeight).coerceAtLeast(1f)
+        val f = ((y - thumbHeight / 2f) / travel).coerceIn(0f, 1f)
+        val target = (f * maxIndex).roundToInt()
+        scope.launch { listState.scrollToItem(target) }
+    }
+
+    Box(
+        modifier = modifier
+            .width(22.dp)
+            .onSizeChanged { trackHeight = it.height }
+            .pointerInput(itemCount, trackHeight) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        dragging = true
+                        jump(offset.y)
+                    },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        jump(change.position.y)
+                    }
+                )
+            },
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Box(
+            modifier = Modifier
+                .width(if (dragging) 6.dp else 3.dp)
+                .fillMaxHeight()
+                .background(
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dragging) 0.45f else 0.2f),
+                    RoundedCornerShape(50)
+                )
+        )
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        x = 0,
+                        y = ((trackHeight - thumbHeight) * fraction).roundToInt()
+                    )
+                }
+                .width(8.dp)
+                .height(46.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = if (dragging) 0.95f else 0.75f),
+                    RoundedCornerShape(50)
+                )
+        )
     }
 }
