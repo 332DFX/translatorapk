@@ -14,7 +14,7 @@ object GodotEngine : EngineAdapter {
         entries.any { it.endsWith(".pck") || it.contains("libgodot", ignoreCase = true) }
 
     override fun limitation() =
-        "Текстовые файлы внутри PCK (JSON/CSV/TXT) переводятся, PCK пересобирается. " +
+        "Текстовые файлы внутри PCK и APK (PO/CSV/JSON/TXT) переводятся, PCK пересобирается. " +
             "Бинарные .translation пока не изменяются."
 }
 

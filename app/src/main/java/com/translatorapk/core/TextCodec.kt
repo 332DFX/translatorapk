@@ -31,9 +31,20 @@ object TextCodec {
         return control * 100 / sample.size < 5
     }
 
+    private val CODE_LITERALS = setOf(
+        "true", "false", "null", "nil", "none", "self", "this",
+        "func", "var", "const", "class", "extends", "signal", "enum",
+        "return", "break", "continue", "pass", "match", "await", "yield",
+        "and", "or", "not", "if", "else", "elif", "while", "for", "in", "is", "as",
+        "on", "off", "void", "undefined", "nan", "inf"
+    )
+
     fun isTranslatable(raw: String): Boolean {
         val s = raw.trim()
         if (s.length < 2 || s.length > 4000) return false
+        if (s.lowercase() in CODE_LITERALS) return false
+        if (s.startsWith("&\"") || s.startsWith("^\"")) return false
+        if (s.startsWith("res://") || s.startsWith("user://") || s.startsWith("uid://")) return false
         if (s.startsWith("http://") || s.startsWith("https://") || s.contains("://")) return false
         if (s.startsWith("data:")) return false
         if (s.matches(Regex("""^[\d\s.,:+\-*/%()\[\]]+$"""))) return false
@@ -51,6 +62,7 @@ object TextCodec {
         EntryKind.CSV -> parseCsv(text).second
         EntryKind.LINES -> parseLines(text)
         EntryKind.ARSC -> emptyList()
+        EntryKind.PO -> parsePo(text)
     }
 
     fun rebuild(kind: EntryKind, original: String, translations: Map<String, String>): String = when (kind) {
@@ -58,6 +70,7 @@ object TextCodec {
         EntryKind.CSV -> rebuildCsv(original, translations)
         EntryKind.LINES -> rebuildLines(original, translations)
         EntryKind.ARSC -> original
+        EntryKind.PO -> rebuildPo(original, translations)
     }
 
     // ---------- JSON ----------
@@ -182,6 +195,192 @@ object TextCodec {
     private fun escapeCsv(value: String, delimiter: Char): String {
         val needQuote = value.any { it == delimiter || it == '"' || it == '\n' || it == '\r' }
         return if (needQuote) "\"" + value.replace("\"", "\"\"") + "\"" else value
+    }
+
+    // ---------- PO ----------
+
+    private data class PoField(
+        val name: String,
+        val value: String,
+        val rawLines: List<String>
+    )
+
+    private data class PoEntry(
+        val header: Boolean,
+        val comments: List<String>,
+        val fields: List<PoField>
+    )
+
+    private fun parsePoEntries(text: String): List<PoEntry> {
+        val blocks = mutableListOf<MutableList<String>>()
+        var block = mutableListOf<String>()
+        for (line in text.lines()) {
+            if (line.isBlank()) {
+                if (block.isNotEmpty()) {
+                    blocks += block
+                    block = mutableListOf()
+                }
+            } else {
+                block += line
+            }
+        }
+        if (block.isNotEmpty()) blocks += block
+
+        val entries = mutableListOf<PoEntry>()
+        for (raw in blocks) {
+            val comments = raw.takeWhile { it.trimStart().startsWith("#") }
+            val body = raw.drop(comments.size)
+            if (body.isEmpty()) {
+                if (comments.isNotEmpty()) entries += PoEntry(false, comments, emptyList())
+                continue
+            }
+            val fields = mutableListOf<PoField>()
+            var i = 0
+            while (i < body.size) {
+                val parsed = parsePoField(body[i])
+                if (parsed == null) {
+                    i++
+                    continue
+                }
+                val rawLines = mutableListOf(body[i])
+                val value = StringBuilder(parsed.second)
+                i++
+                while (i < body.size) {
+                    val cont = parsePoContinuation(body[i]) ?: break
+                    rawLines += body[i]
+                    value.append(cont)
+                    i++
+                }
+                fields += PoField(parsed.first, value.toString(), rawLines)
+            }
+            if (fields.isEmpty() && comments.isEmpty()) continue
+            val header = fields.any { it.name == "msgid" && it.value.isEmpty() }
+            entries += PoEntry(header, comments, fields)
+        }
+        return entries
+    }
+
+    private fun parsePoField(line: String): Pair<String, String>? {
+        val trimmed = line.trimStart()
+        val space = trimmed.indexOf(' ')
+        if (space <= 0) return null
+        val name = trimmed.substring(0, space)
+        if (name != "msgid" && name != "msgstr" && name != "msgid_plural" &&
+            name != "msgctxt" && !name.matches(Regex("""msgstr\[\d+\]"""))
+        ) return null
+        val quoted = parsePoQuoted(trimmed.substring(space))
+        return if (quoted != null) name to quoted else null
+    }
+
+    private fun parsePoContinuation(line: String): String? {
+        val trimmed = line.trimStart()
+        if (!trimmed.startsWith('"')) return null
+        return parsePoQuoted(trimmed)
+    }
+
+    private fun parsePoQuoted(fragment: String): String? {
+        val start = fragment.indexOf('"')
+        if (start < 0) return null
+        var end = start + 1
+        var escaped = false
+        while (end < fragment.length) {
+            val c = fragment[end]
+            if (!escaped && c == '"') break
+            if (!escaped && c == '\\') escaped = true else escaped = false
+            end++
+        }
+        if (end >= fragment.length) return null
+        return unescapePo(fragment.substring(start + 1, end))
+    }
+
+    private fun unescapePo(value: String): String {
+        val out = StringBuilder()
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c != '\\' || i + 1 >= value.length) {
+                out.append(c)
+                i++
+                continue
+            }
+            when (val next = value[i + 1]) {
+                'n' -> out.append('\n')
+                'r' -> out.append('\r')
+                't' -> out.append('\t')
+                '"' -> out.append('"')
+                '\\' -> out.append('\\')
+                else -> out.append(next)
+            }
+            i += 2
+        }
+        return out.toString()
+    }
+
+    private fun escapePo(value: String): String {
+        val out = StringBuilder()
+        for (c in value) {
+            when (c) {
+                '\\' -> out.append("\\\\")
+                '"' -> out.append("\\\"")
+                '\n' -> out.append("\\n")
+                '\r' -> out.append("\\r")
+                '\t' -> out.append("\\t")
+                else -> out.append(c)
+            }
+        }
+        return out.toString()
+    }
+
+    private fun parsePo(text: String): List<ParsedItem> {
+        val out = mutableListOf<ParsedItem>()
+        parsePoEntries(text).forEachIndexed { index, entry ->
+            if (entry.header) return@forEachIndexed
+            val msgid = entry.fields.firstOrNull { it.name == "msgid" }?.value.orEmpty()
+            val plurals = entry.fields.filter { it.name.matches(Regex("""msgstr\[\d+\]""")) }
+            if (plurals.isNotEmpty()) {
+                for (field in plurals) {
+                    if (isTranslatable(field.value)) {
+                        out += ParsedItem("po:$index:${field.name}", field.value)
+                    }
+                }
+                if (plurals.all { it.value.isBlank() }) {
+                    val source = entry.fields.firstOrNull { it.name == "msgid_plural" }?.value ?: msgid
+                    if (isTranslatable(source)) out += ParsedItem("po:$index:msgstr[0]", source)
+                }
+            } else {
+                val msgstr = entry.fields.firstOrNull { it.name == "msgstr" }?.value.orEmpty()
+                val source = msgstr.ifBlank { msgid }
+                if (isTranslatable(source)) out += ParsedItem("po:$index:msgstr", source)
+            }
+        }
+        return out
+    }
+
+    private fun rebuildPo(original: String, translations: Map<String, String>): String {
+        if (translations.isEmpty()) return original
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val trailingNewline = original.endsWith("\n") || original.endsWith("\r")
+        val entries = parsePoEntries(original)
+        val blocks = mutableListOf<String>()
+        entries.forEachIndexed { index, entry ->
+            if (entry.header || entry.fields.isEmpty()) {
+                blocks += (entry.comments + entry.fields.flatMap { it.rawLines }).joinToString(newline)
+                return@forEachIndexed
+            }
+            val lines = mutableListOf<String>()
+            lines += entry.comments
+            for (field in entry.fields) {
+                val translated = translations["po:$index:${field.name}"]
+                if (translated != null) {
+                    lines += "${field.name} \"${escapePo(translated)}\""
+                } else {
+                    lines += field.rawLines
+                }
+            }
+            blocks += lines.joinToString(newline)
+        }
+        val body = blocks.joinToString(newline + newline)
+        return if (trailingNewline) body + newline else body
     }
 
     // ---------- LINES ----------

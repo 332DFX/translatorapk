@@ -54,6 +54,7 @@ class ApkAnalyzer(private val context: Context) {
                     !name.startsWith("lib/") &&
                     !name.startsWith("res/") &&
                     !name.startsWith("assets/bin/Data/") &&
+                    !isGodotCache(name) &&
                     kindFor(name) != null &&
                     (zip.getEntry(name)?.size?.let { it in 1L..MAX_FILE_BYTES } == true)
             }
@@ -202,6 +203,7 @@ class ApkAnalyzer(private val context: Context) {
                 for (inner in pack.entries) {
                     if (total >= MAX_ENTRIES) break
                     if (inner.flags and 1 != 0) continue
+                    if (isGodotCache(inner.path)) continue
                     if (inner.size !in 1L..MAX_FILE_BYTES) continue
                     val kind = kindFor(inner.path) ?: continue
                     val innerBytes = GodotPck.read(pack, inner.path) ?: continue
@@ -258,6 +260,15 @@ class ApkAnalyzer(private val context: Context) {
         )
     }
 
+    private fun isGodotCache(name: String): Boolean {
+        val normalized = name.replace('\\', '/')
+        return normalized.contains("/.godot/") ||
+            normalized.startsWith(".godot/") ||
+            normalized.contains("/.import/") ||
+            normalized.startsWith(".import/") ||
+            normalized.endsWith("global_script_class_cache.cfg")
+    }
+
     private fun looksLikeUnitySerialized(name: String): Boolean {
         if (!name.startsWith("assets/bin/Data/")) return false
         val base = name.substringAfterLast('/')
@@ -282,6 +293,7 @@ class ApkAnalyzer(private val context: Context) {
 
     private fun kindFor(name: String): EntryKind? = when (name.substringAfterLast('.', "").lowercase()) {
         "json" -> EntryKind.JSON
+        "po", "pot" -> EntryKind.PO
         "csv", "tsv" -> EntryKind.CSV
         "txt", "properties", "ini", "cfg", "conf", "yml", "yaml", "lines" -> EntryKind.LINES
         else -> null

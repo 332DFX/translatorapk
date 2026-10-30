@@ -2,14 +2,14 @@ package com.translatorapk.model
 
 enum class EngineType(val title: String, val subtitle: String) {
     NATIVE("Android", "resources.arsc, строки приложения"),
-    GODOT("Godot", "PCK, .translation, CSV"),
+    GODOT("Godot", "PCK, .po, CSV"),
     UNITY("Unity", "assets/bin/Data, TextAsset"),
     UNREAL("Unreal", ".locres, .pak"),
     GENERIC("Generic", "JSON, CSV, текстовые файлы"),
     UNKNOWN("Неизвестно", "Только ZIP-анализ")
 }
 
-enum class EntryKind { JSON, CSV, LINES, ARSC }
+enum class EntryKind { JSON, CSV, LINES, ARSC, PO }
 
 enum class EntryStatus { PENDING, TRANSLATED, EDITED, ERROR }
 
