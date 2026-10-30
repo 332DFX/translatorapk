@@ -133,6 +133,54 @@ class ApkAnalyzer(private val context: Context) {
                 }
             }
 
+            val pckNames = names.filter { it.endsWith(".pck", true) }
+            for (pckName in pckNames) {
+                if (total >= MAX_ENTRIES) break
+                val pckEntry = zip.getEntry(pckName) ?: continue
+                if (pckEntry.size !in 1L..MAX_PCK_BYTES) continue
+                onStage("Разбор Godot PCK: ${pckName.substringAfterLast('/')}")
+                val pckBytes = runCatching {
+                    zip.getInputStream(pckEntry).use { it.readBytes() }
+                }.getOrNull() ?: continue
+                val pack = runCatching { GodotPck.parse(pckBytes) }.getOrNull()
+                if (pack == null) {
+                    notes += AnalysisNote(
+                        NoteLevel.WARNING,
+                        "$pckName: PCK зашифрован или имеет неподдерживаемый формат."
+                    )
+                    continue
+                }
+                var pckStrings = 0
+                for (inner in pack.entries) {
+                    if (total >= MAX_ENTRIES) break
+                    if (inner.flags and 1 != 0) continue
+                    if (inner.size !in 1L..MAX_FILE_BYTES) continue
+                    val kind = kindFor(inner.path) ?: continue
+                    val innerBytes = GodotPck.read(pack, inner.path) ?: continue
+                    if (!TextCodec.isProbablyText(innerBytes)) continue
+                    val text = runCatching { innerBytes.toString(Charsets.UTF_8) }.getOrNull() ?: continue
+                    val parsed = runCatching { TextCodec.parse(kind, text) }.getOrNull() ?: continue
+                    for (item in parsed) {
+                        if (total >= MAX_ENTRIES) break
+                        total++
+                        pckStrings++
+                        entries += TextEntry(
+                            id = "$pckName!/${inner.path}::${item.key}",
+                            filePath = "pck://$pckName!/${inner.path}",
+                            key = item.key,
+                            source = item.text,
+                            kind = kind,
+                            status = EntryStatus.PENDING
+                        )
+                    }
+                }
+                notes += AnalysisNote(
+                    NoteLevel.INFO,
+                    "$pckName: файлов ${pack.entries.size}, строк $pckStrings. " +
+                        "Бинарные .translation пока не изменяются."
+                )
+            }
+
             if (entries.isEmpty()) {
                 notes += AnalysisNote(
                     NoteLevel.INFO,
@@ -189,6 +237,7 @@ class ApkAnalyzer(private val context: Context) {
         const val MAX_FILE_BYTES = 2 * 1024 * 1024L
         const val MAX_ARSC_BYTES = 32 * 1024 * 1024L
         const val MAX_FONT_BYTES = 12 * 1024 * 1024L
+        const val MAX_PCK_BYTES = 96 * 1024 * 1024L
         const val MAX_ENTRIES = 6000
         val CYRILLIC_TARGETS = setOf("ru", "uk", "be", "bg", "sr", "mk", "kk", "ky", "tg", "mn")
     }

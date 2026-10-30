@@ -14,7 +14,8 @@ object GodotEngine : EngineAdapter {
         entries.any { it.endsWith(".pck") || it.contains("libgodot", ignoreCase = true) }
 
     override fun limitation() =
-        "Файлы внутри PCK пока не распаковываются. Обрабатываются только текстовые файлы вне PCK."
+        "Текстовые файлы внутри PCK (JSON/CSV/TXT) переводятся, PCK пересобирается. " +
+            "Бинарные .translation пока не изменяются."
 }
 
 object UnityEngine : EngineAdapter {

@@ -18,9 +18,13 @@ class ApkBuilder(private val context: Context) {
 
         val outputDir = File(context.filesDir, "output").apply { mkdirs() }
         val unsigned = File(outputDir, "unsigned-${System.currentTimeMillis()}.apk")
-        val byFile = project.entries
-            .filter { it.translation.isNotBlank() }
+        val translated = project.entries.filter { it.translation.isNotBlank() }
+        val byFile = translated
+            .filter { !it.filePath.startsWith("pck://") }
             .groupBy { it.filePath }
+        val pckGroups = translated
+            .filter { it.filePath.startsWith("pck://") }
+            .groupBy { it.filePath.removePrefix("pck://").substringBefore("!/") }
         val fonts = project.fontPaths.toSet()
 
         ZipFile(original).use { zip ->
@@ -29,9 +33,13 @@ class ApkBuilder(private val context: Context) {
                 var done = 0
                 for (entry in zip.entries()) {
                     if (entry.isDirectory) continue
+                    val pckChanged = pckGroups[entry.name]
                     val changed = byFile[entry.name]
                     val bytes = if (entry.name in fonts) {
                         fontBytes(entry.name)
+                    } else if (pckChanged != null) {
+                        val original = zip.getInputStream(entry).use { it.readBytes() }
+                        rebuildPck(original, pckChanged)
                     } else if (changed != null) {
                         val original = zip.getInputStream(entry).use { it.readBytes() }
                         if (entry.name == "resources.arsc") {
@@ -93,5 +101,24 @@ class ApkBuilder(private val context: Context) {
             else -> "NotoSans-Regular.ttf"
         }
         return context.assets.open("fonts/$file").use { it.readBytes() }
+    }
+
+    private fun rebuildPck(original: ByteArray, items: List<com.translatorapk.model.TextEntry>): ByteArray {
+        val pack = GodotPck.parse(original)
+            ?: throw IllegalStateException("Не удалось разобрать Godot PCK")
+        val groups = items.groupBy { it.filePath.removePrefix("pck://").substringAfter("!/") }
+        val replacements = mutableMapOf<String, ByteArray>()
+        for ((innerPath, entries) in groups) {
+            val originalBytes = GodotPck.read(pack, innerPath) ?: continue
+            val kind = entries.first().kind
+            val translations = entries.associate { it.key to it.translation }
+            replacements[innerPath] = TextCodec.rebuild(
+                kind,
+                originalBytes.toString(Charsets.UTF_8),
+                translations
+            ).toByteArray(Charsets.UTF_8)
+        }
+        return GodotPck.rebuild(pack, replacements)
+            ?: throw IllegalStateException("PCK зашифрован и не может быть пересобран")
     }
 }
