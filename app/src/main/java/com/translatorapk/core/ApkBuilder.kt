@@ -30,10 +30,18 @@ class ApkBuilder(private val context: Context) {
                     if (entry.isDirectory) continue
                     val changed = byFile[entry.name]
                     val bytes = if (changed != null) {
-                        val originalText = zip.getInputStream(entry).use { it.readBytes().toString(Charsets.UTF_8) }
-                        val kind = changed.first().kind
-                        val translations = changed.associate { it.key to it.translation }
-                        TextCodec.rebuild(kind, originalText, translations).toByteArray(Charsets.UTF_8)
+                        val original = zip.getInputStream(entry).use { it.readBytes() }
+                        if (entry.name == "resources.arsc") {
+                            val translations = changed.mapNotNull { item ->
+                                item.key.removePrefix("arsc:").toIntOrNull()?.let { it to item.translation }
+                            }.toMap()
+                            ArscEditor.apply(original, translations)
+                        } else {
+                            val kind = changed.first().kind
+                            val translations = changed.associate { it.key to it.translation }
+                            TextCodec.rebuild(kind, original.toString(Charsets.UTF_8), translations)
+                                .toByteArray(Charsets.UTF_8)
+                        }
                     } else {
                         zip.getInputStream(entry).use { it.readBytes() }
                     }

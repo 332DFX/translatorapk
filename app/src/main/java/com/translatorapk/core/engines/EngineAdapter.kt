@@ -43,8 +43,8 @@ object NativeAndroidEngine : EngineAdapter {
         entries.contains("resources.arsc") || entries.contains("classes.dex")
 
     override fun limitation() =
-        "Строки в resources.arsc (обычные res/values) в этой версии не изменяются. " +
-            "Переводимые текстовые assets обрабатываются, но для полного перевода нужен apktool-пайплайн."
+        "Переводятся строки resources.arsc (default/string) и текстовые assets. " +
+            "Плюралы, массивы и строки в коде пока не изменяются."
 }
 
 object GenericEngine : EngineAdapter {

@@ -80,6 +80,36 @@ class ApkAnalyzer(private val context: Context) {
                     )
                 }
             }
+            val arsc = zip.getEntry("resources.arsc")
+            if (arsc != null && total < MAX_ENTRIES && arsc.size in 1L..MAX_ARSC_BYTES) {
+                onStage("Разбор resources.arsc")
+                val arscBytes = runCatching {
+                    zip.getInputStream(arsc).use { it.readBytes() }
+                }.getOrNull()
+                if (arscBytes != null) {
+                    val extracted = runCatching {
+                        ArscEditor.extract(arscBytes, targetLang, MAX_ENTRIES - total)
+                    }.getOrDefault(emptyList())
+                    for (item in extracted) {
+                        entries += TextEntry(
+                            id = "resources.arsc::arsc:${item.index}",
+                            filePath = "resources.arsc",
+                            key = "arsc:${item.index}",
+                            source = item.text,
+                            kind = EntryKind.ARSC,
+                            status = EntryStatus.PENDING
+                        )
+                        total++
+                    }
+                    if (extracted.isNotEmpty()) {
+                        notes += AnalysisNote(
+                            NoteLevel.INFO,
+                            "Найдено строк Android-ресурсов: ${extracted.size}"
+                        )
+                    }
+                }
+            }
+
             if (entries.isEmpty()) {
                 notes += AnalysisNote(
                     NoteLevel.INFO,
@@ -87,7 +117,7 @@ class ApkAnalyzer(private val context: Context) {
                         "Приложение может хранить строки в ресурсах или скомпилированном коде."
                 )
             } else {
-                notes += AnalysisNote(NoteLevel.INFO, "Найдено строк: ${entries.size} в ${candidates.size} файлах.")
+                notes += AnalysisNote(NoteLevel.INFO, "Найдено строк: ${entries.size}")
             }
         }
 
@@ -125,6 +155,7 @@ class ApkAnalyzer(private val context: Context) {
 
     private companion object {
         const val MAX_FILE_BYTES = 2 * 1024 * 1024L
+        const val MAX_ARSC_BYTES = 32 * 1024 * 1024L
         const val MAX_ENTRIES = 6000
     }
 }

@@ -9,7 +9,7 @@ enum class EngineType(val title: String, val subtitle: String) {
     UNKNOWN("Неизвестно", "Только ZIP-анализ")
 }
 
-enum class EntryKind { JSON, CSV, LINES }
+enum class EntryKind { JSON, CSV, LINES, ARSC }
 
 enum class EntryStatus { PENDING, TRANSLATED, EDITED, ERROR }
 

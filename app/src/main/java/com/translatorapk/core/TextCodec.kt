@@ -50,12 +50,14 @@ object TextCodec {
         EntryKind.JSON -> parseJson(text)
         EntryKind.CSV -> parseCsv(text).second
         EntryKind.LINES -> parseLines(text)
+        EntryKind.ARSC -> emptyList()
     }
 
     fun rebuild(kind: EntryKind, original: String, translations: Map<String, String>): String = when (kind) {
         EntryKind.JSON -> rebuildJson(original, translations)
         EntryKind.CSV -> rebuildCsv(original, translations)
         EntryKind.LINES -> rebuildLines(original, translations)
+        EntryKind.ARSC -> original
     }
 
     // ---------- JSON ----------
