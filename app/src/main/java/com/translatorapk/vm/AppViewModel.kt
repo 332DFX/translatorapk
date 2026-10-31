@@ -16,6 +16,7 @@ import com.translatorapk.model.EntryStatus
 import com.translatorapk.model.Screen
 import com.translatorapk.model.TranslationMode
 import com.translatorapk.model.TranslationProject
+import com.translatorapk.model.formatLanguagesEnumeration
 import com.translatorapk.util.ConnectivityObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +44,8 @@ data class UiState(
     val separateInstall: Boolean = false,
     val filter: EntryFilter = EntryFilter.ALL,
     val query: String = "",
-    val detectedLanguage: String? = null
+    val detectedLanguage: String? = null,
+    val detectedLanguages: List<String> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -86,18 +88,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         onStage = { stage -> _uiState.update { it.copy(stage = stage) } }
                     )
                 }
+
+                _uiState.update { it.copy(stage = "Определение языков") }
+                val detectedLangs = withContext(Dispatchers.IO) {
+                    coordinator.detectLanguages(
+                        texts = project.entries.map { it.source },
+                        targetLang = currentSettings.targetLang
+                    )
+                }
+                val primaryDetected = detectedLangs.firstOrNull() ?: project.sourceLang
+                val updatedProject = project.copy(
+                    detectedLanguage = primaryDetected,
+                    detectedLanguages = detectedLangs,
+                    sourceLang = if (project.sourceLang.isNullOrBlank() || project.sourceLang == "auto") primaryDetected else project.sourceLang
+                )
+
+                val message = if (updatedProject.entries.isEmpty()) {
+                    "Текст для перевода не найден"
+                } else if (detectedLangs.isNotEmpty()) {
+                    val langsFormatted = formatLanguagesEnumeration(detectedLangs)
+                    "Определены языки: $langsFormatted · ${updatedProject.entries.size} строк"
+                } else {
+                    "Готово: ${updatedProject.entries.size} строк"
+                }
+
                 _uiState.update {
                     it.copy(
                         analyzing = false,
-                        project = project,
+                        project = updatedProject,
                         screen = Screen.PROJECT,
                         stage = "",
-                        detectedLanguage = project.sourceLang,
-                        message = if (project.entries.isEmpty()) {
-                            "Текст для перевода не найден"
-                        } else {
-                            "Готово: ${project.entries.size} строк"
-                        }
+                        detectedLanguage = primaryDetected,
+                        detectedLanguages = detectedLangs,
+                        message = message
                     )
                 }
             } catch (e: Exception) {
@@ -111,13 +134,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun translateAll() {
         val project = _uiState.value.project ?: return
         if (_uiState.value.translating) return
-        if (!online.value) {
-            _uiState.update { it.copy(error = "Нет подключения к интернету. Подключитесь и повторите.") }
-            return
-        }
 
         val current = settings.value
         val mode = TranslationMode.fromId(current.provider)
+        if (!online.value && mode != TranslationMode.MLKIT) {
+            _uiState.update { it.copy(error = "Нет подключения к интернету. Подключитесь и повторите.") }
+            return
+        }
         if (mode == TranslationMode.GOOGLE && current.apiKey.isBlank()) {
             _uiState.update {
                 it.copy(

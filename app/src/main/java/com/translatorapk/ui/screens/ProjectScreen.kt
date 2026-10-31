@@ -68,6 +68,7 @@ import com.translatorapk.model.EntryStatus
 import com.translatorapk.model.NoteLevel
 import com.translatorapk.model.TextEntry
 import com.translatorapk.model.TranslationProject
+import com.translatorapk.model.formatLanguagesEnumeration
 import com.translatorapk.model.languageLabel
 import com.translatorapk.ui.components.StringCard
 
@@ -266,9 +267,13 @@ fun ProjectScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     color = colors.onSurface
                                 )
-                                if (project.detectedLanguage != null) {
+                                val detectedLangs = project.detectedLanguages.ifEmpty {
+                                    listOfNotNull(project.detectedLanguage)
+                                }
+                                if (detectedLangs.isNotEmpty()) {
+                                    val prefix = if (detectedLangs.size > 1) "Определены языки: " else "Определён язык: "
                                     Text(
-                                        text = "Определён язык: ${languageLabel(project.detectedLanguage)}",
+                                        text = "$prefix${formatLanguagesEnumeration(detectedLangs)}",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = colors.secondary
                                     )

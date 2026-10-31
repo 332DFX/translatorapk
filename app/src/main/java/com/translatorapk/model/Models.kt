@@ -38,6 +38,7 @@ data class TranslationProject(
     val entries: List<TextEntry>,
     val notes: List<AnalysisNote>,
     val detectedLanguage: String? = null,
+    val detectedLanguages: List<String> = emptyList(),
     val fontPaths: List<String> = emptyList()
 )
 

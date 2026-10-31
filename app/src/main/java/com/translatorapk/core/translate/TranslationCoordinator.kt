@@ -30,6 +30,9 @@ class TranslationCoordinator(
     @Volatile
     private var myMemoryQuotaDay: String? = null
 
+    suspend fun detectLanguages(texts: List<String>, targetLang: String? = null): List<String> =
+        mlKit.detectLanguages(texts, targetLang)
+
     suspend fun translate(
         texts: List<String>,
         source: String?,

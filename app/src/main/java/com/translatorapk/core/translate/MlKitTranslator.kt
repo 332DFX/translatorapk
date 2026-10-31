@@ -12,27 +12,79 @@ import kotlinx.coroutines.withContext
 
 class MlKitTranslator {
 
-    suspend fun detectLanguage(texts: List<String>): String? = withContext(Dispatchers.IO) {
-        val usable = texts.map { it.trim() }.filter { it.length >= 2 }
-        if (usable.isEmpty()) return@withContext null
+    suspend fun detectLanguages(
+        texts: List<String>,
+        targetLang: String? = null
+    ): List<String> = withContext(Dispatchers.IO) {
+        val usable = texts.map { it.trim() }.filter { it.length >= 2 && it.any { c -> c.isLetter() } }
+        if (usable.isEmpty()) return@withContext emptyList()
 
-        val identifier = LanguageIdentification.getClient()
-        try {
-            val joined = usable.take(30).joinToString("\n").take(1_200)
-            val joinedCode = identifier.identifyLanguage(joined).await()
-            if (joinedCode != "und") return@withContext serviceCode(joinedCode)
+        val normalizedTarget = targetLang?.lowercase()?.substringBefore('-')
+        val detectedCounts = mutableMapOf<String, Int>()
 
-            val votes = mutableMapOf<String, Int>()
-            for (sample in usable.take(8)) {
-                val code = identifier.identifyLanguage(sample.take(400)).await()
-                if (code != "und") votes[code] = (votes[code] ?: 0) + 1
+        // 1. Fast script & alphabet heuristic
+        for (sample in usable) {
+            val hLang = detectScriptHeuristic(sample)
+            if (hLang != null && hLang != normalizedTarget) {
+                detectedCounts[hLang] = (detectedCounts[hLang] ?: 0) + 1
             }
-            votes.maxByOrNull { it.value }?.key?.let { serviceCode(it) }
-        } catch (e: Exception) {
-            null
-        } finally {
-            identifier.close()
         }
+
+        // 2. ML Kit LanguageIdentification client
+        val identifier = runCatching { LanguageIdentification.getClient() }.getOrNull()
+        if (identifier != null) {
+            try {
+                val step = (usable.size / 80).coerceAtLeast(1)
+                val samples = usable.filterIndexed { index, _ -> index % step == 0 }.take(80)
+
+                for (sample in samples) {
+                    val code = identifier.identifyLanguage(sample.take(400)).await()
+                    if (code != "und") {
+                        val sCode = serviceCode(code)
+                        val baseCode = sCode.lowercase().substringBefore('-')
+                        if (baseCode != normalizedTarget) {
+                            detectedCounts[sCode] = (detectedCounts[sCode] ?: 0) + 2
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore ML Kit exceptions on missing models, fallback to heuristics
+            } finally {
+                identifier.close()
+            }
+        }
+
+        val totalVotes = detectedCounts.values.sum().coerceAtLeast(1)
+        detectedCounts.entries
+            .filter { it.value >= 2 || (it.value.toFloat() / totalVotes) >= 0.05f }
+            .sortedByDescending { it.value }
+            .map { it.key }
+    }
+
+    suspend fun detectLanguage(texts: List<String>): String? =
+        detectLanguages(texts).firstOrNull()
+
+    private fun detectScriptHeuristic(text: String): String? {
+        val s = text.trim()
+        if (s.isEmpty()) return null
+        // Japanese: Hiragana, Katakana
+        if (s.any { it in '\u3040'..'\u309F' || it in '\u30A0'..'\u30FF' }) return "ja"
+        // Korean: Hangul
+        if (s.any { it in '\uAC00'..'\uD7AF' || it in '\u1100'..'\u11FF' }) return "ko"
+        // Chinese: CJK Ideographs
+        if (s.any { it in '\u4E00'..'\u9FFF' }) return "zh-CN"
+        // Cyrillic (Ukrainian / Russian)
+        if (s.any { it in "іїєґІЇЄҐ" }) return "uk"
+        if (s.any { it in '\u0400'..'\u04FF' }) return "ru"
+        // Turkish specific letters
+        if (s.any { it in "ğşışĞŞIİ" }) return "tr"
+        // Generic Latin with English indicators
+        if (s.any { it in 'a'..'z' || it in 'A'..'Z' }) return "en"
+        // Arabic
+        if (s.any { it in '\u0600'..'\u06FF' }) return "ar"
+        // Thai
+        if (s.any { it in '\u0E00'..'\u0E7F' }) return "th"
+        return null
     }
 
     suspend fun translate(
