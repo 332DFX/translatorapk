@@ -31,7 +31,7 @@ object ManifestEditor {
         if (total !in 8..manifest.size) return null
 
         val chunks = mutableListOf<Chunk>()
-        var pos = 0
+        var pos = 8
         while (pos + 8 <= total) {
             val type = u16(manifest, pos)
             val headerSize = u16(manifest, pos + 2)
