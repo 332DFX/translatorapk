@@ -3,7 +3,7 @@ package com.translatorapk.core
 object PlaceholderGuard {
 
     private val pattern = Regex(
-        """%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[a-zA-Z]|\$\{[^}]+\}|\{[A-Za-z_][\w.]*\}|\{\d+\}|<[^>]{1,60}>|&[a-zA-Z#0-9]+;|\\[ntr]"""
+        """%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[a-zA-Z]|\$\{[^}]+\}|\{[A-Za-z_][\w.]*\}|\{\d+\}|<[^>]{1,60}>|\[/?[a-zA-Z_][^\]]{0,60}\]|&[a-zA-Z#0-9]+;|\\[ntr]"""
     )
 
     data class Masked(val text: String, val tokens: List<String>)

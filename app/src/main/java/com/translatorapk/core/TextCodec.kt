@@ -63,6 +63,7 @@ object TextCodec {
         EntryKind.LINES -> parseLines(text)
         EntryKind.ARSC -> emptyList()
         EntryKind.PO -> parsePo(text)
+        EntryKind.TRES -> parseTres(text)
     }
 
     fun rebuild(kind: EntryKind, original: String, translations: Map<String, String>): String = when (kind) {
@@ -71,6 +72,7 @@ object TextCodec {
         EntryKind.LINES -> rebuildLines(original, translations)
         EntryKind.ARSC -> original
         EntryKind.PO -> rebuildPo(original, translations)
+        EntryKind.TRES -> rebuildTres(original, translations)
     }
 
     // ---------- JSON ----------
@@ -446,5 +448,50 @@ object TextCodec {
             }
         }
         return lines.joinToString("\n")
+    }
+
+    // ---------- TRES (Godot Text Resource / Dialogue Manager / Scenes) ----------
+
+    private val TRES_EXTRACT_REGEX = Regex(
+        """^(\s*)(&\"(text|character|prompt)\"|(?:text|title|description|tooltip_text|hint_tooltip|placeholder_text))\s*([:=])\s*\"(.*)\"\s*(,?)$"""
+    )
+
+    private fun parseTres(text: String): List<ParsedItem> {
+        val out = mutableListOf<ParsedItem>()
+        val lines = text.lines()
+        for (i in lines.indices) {
+            val line = lines[i]
+            val match = TRES_EXTRACT_REGEX.matchEntire(line) ?: continue
+            val field = match.groupValues[2]
+            val rawVal = match.groupValues[5]
+            val unescaped = unescapePo(rawVal)
+            if (isTranslatable(unescaped)) {
+                out += ParsedItem("tres:$i:$field", unescaped)
+            }
+        }
+        return out
+    }
+
+    private fun rebuildTres(original: String, translations: Map<String, String>): String {
+        if (translations.isEmpty()) return original
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val trailingNewline = original.endsWith("\n") || original.endsWith("\r")
+        val lines = original.lines().toMutableList()
+        for ((key, translated) in translations) {
+            val parts = key.split(':')
+            if (parts.size < 3 || parts[0] != "tres") continue
+            val lineIdx = parts[1].toIntOrNull() ?: continue
+            if (lineIdx !in lines.indices) continue
+            val line = lines[lineIdx]
+            val match = TRES_EXTRACT_REGEX.matchEntire(line) ?: continue
+            val indent = match.groupValues[1]
+            val field = match.groupValues[2]
+            val sep = match.groupValues[4]
+            val comma = match.groupValues[6]
+            val escaped = escapePo(translated)
+            lines[lineIdx] = "$indent$field $sep \"$escaped\"$comma"
+        }
+        val body = lines.joinToString(newline)
+        return if (trailingNewline) body + newline else body
     }
 }

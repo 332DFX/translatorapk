@@ -22,6 +22,7 @@ data class TranslationBatchResult(
 )
 
 class TranslationCoordinator(
+    private val googleFree: GoogleFreeTranslator = GoogleFreeTranslator(),
     private val myMemory: MyMemoryTranslator = MyMemoryTranslator(),
     private val mlKit: MlKitTranslator = MlKitTranslator(),
     private val google: GoogleTranslator = GoogleTranslator()
@@ -44,6 +45,17 @@ class TranslationCoordinator(
 
         if (mode == TranslationMode.GOOGLE) {
             return@withContext translateGoogle(texts, source, target, googleKey, onStage, onProgress)
+        }
+
+        if (mode == TranslationMode.GOOGLE_FREE) {
+            return@withContext translateGoogleFree(texts, source, target, onStage, onProgress)
+        }
+
+        if (mode == TranslationMode.AUTO) {
+            val freeResult = runCatching {
+                translateGoogleFree(texts, source, target, onStage, onProgress)
+            }.getOrNull()
+            if (freeResult != null) return@withContext freeResult
         }
 
         val total = texts.size
@@ -175,6 +187,44 @@ class TranslationCoordinator(
             restore(raw, m)
         }
         return TranslationBatchResult(items, detected, "Google Translate", false)
+    }
+
+    private suspend fun translateGoogleFree(
+        texts: List<String>,
+        source: String?,
+        target: String,
+        onStage: (String) -> Unit,
+        onProgress: (Int, Int, String) -> Unit
+    ): TranslationBatchResult {
+        onStage("Определение языка")
+        val resolvedSource = if (!source.isNullOrBlank() && source != "auto") {
+            normalizeCode(source)
+        } else {
+            mlKit.detectLanguage(texts) ?: "auto"
+        }
+
+        onStage("Перевод Google (Бесплатно)")
+        val masked = texts.map { PlaceholderGuard.mask(it) }
+        val rawTranslations = googleFree.translateBatch(
+            texts = masked.map { it.text },
+            source = resolvedSource,
+            target = target,
+            onProgress = { current, total ->
+                onProgress(current, total, "Google")
+            }
+        )
+
+        val items = masked.mapIndexed { index, m ->
+            val raw = rawTranslations.getOrNull(index) ?: m.text
+            restore(raw, m)
+        }
+
+        return TranslationBatchResult(
+            items = items,
+            detectedLanguage = resolvedSource,
+            providerLabel = "Google (Бесплатно)",
+            quotaFallback = false
+        )
     }
 
     private fun restore(raw: String, masked: PlaceholderGuard.Masked): TranslatedItem {

@@ -182,7 +182,7 @@ class ApkAnalyzer(private val context: Context) {
                 }
             }
 
-            val pckNames = names.filter { it.endsWith(".pck", true) }
+            val pckNames = names.filter { it.endsWith(".pck", true) || it.endsWith(".sparsepck", true) }
             for (pckName in pckNames) {
                 if (total >= MAX_ENTRIES) break
                 val pckEntry = zip.getEntry(pckName) ?: continue
@@ -262,11 +262,14 @@ class ApkAnalyzer(private val context: Context) {
 
     private fun isGodotCache(name: String): Boolean {
         val normalized = name.replace('\\', '/')
-        return normalized.contains("/.godot/") ||
-            normalized.startsWith(".godot/") ||
-            normalized.contains("/.import/") ||
-            normalized.startsWith(".import/") ||
-            normalized.endsWith("global_script_class_cache.cfg")
+        if (normalized.endsWith(".tres", true) || normalized.endsWith(".tscn", true)) return false
+        return normalized.contains("/.godot/uid_cache") ||
+            normalized.contains("/.godot/global_script_class_cache") ||
+            normalized.contains("/.godot/extension_list") ||
+            normalized.endsWith(".import") ||
+            normalized.endsWith(".bin") ||
+            normalized.endsWith(".gdc") ||
+            normalized.endsWith(".scn")
     }
 
     private fun looksLikeUnitySerialized(name: String): Boolean {
@@ -295,6 +298,7 @@ class ApkAnalyzer(private val context: Context) {
         "json" -> EntryKind.JSON
         "po", "pot" -> EntryKind.PO
         "csv", "tsv" -> EntryKind.CSV
+        "tres", "tscn" -> EntryKind.TRES
         "txt", "properties", "ini", "cfg", "conf", "yml", "yaml", "lines" -> EntryKind.LINES
         else -> null
     }
@@ -308,12 +312,12 @@ class ApkAnalyzer(private val context: Context) {
     }
 
     private companion object {
-        const val MAX_FILE_BYTES = 2 * 1024 * 1024L
+        const val MAX_FILE_BYTES = 4 * 1024 * 1024L
         const val MAX_ARSC_BYTES = 32 * 1024 * 1024L
         const val MAX_FONT_BYTES = 12 * 1024 * 1024L
         const val MAX_PCK_BYTES = 96 * 1024 * 1024L
         const val MAX_UNITY_BYTES = 96 * 1024 * 1024L
-        const val MAX_ENTRIES = 6000
+        const val MAX_ENTRIES = 12000
         val CYRILLIC_TARGETS = setOf("ru", "uk", "be", "bg", "sr", "mk", "kk", "ky", "tg", "mn")
     }
 }

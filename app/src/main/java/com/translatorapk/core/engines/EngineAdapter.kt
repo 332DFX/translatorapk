@@ -11,11 +11,16 @@ interface EngineAdapter {
 object GodotEngine : EngineAdapter {
     override val type = EngineType.GODOT
     override fun matches(entries: List<String>): Boolean =
-        entries.any { it.endsWith(".pck") || it.contains("libgodot", ignoreCase = true) }
+        entries.any {
+            it.endsWith(".pck", true) ||
+            it.endsWith(".sparsepck", true) ||
+            it.contains("libgodot", ignoreCase = true) ||
+            it.contains(".godot/") ||
+            it.endsWith("project.binary")
+        }
 
     override fun limitation() =
-        "Текстовые файлы внутри PCK и APK (PO/CSV/JSON/TXT) переводятся, PCK пересобирается. " +
-            "Бинарные .translation пока не изменяются."
+        "Текстовые файлы внутри PCK и APK (PO/TRES/Dialogue/CSV/JSON/TXT) переводятся, PCK пересобирается."
 }
 
 object UnityEngine : EngineAdapter {
