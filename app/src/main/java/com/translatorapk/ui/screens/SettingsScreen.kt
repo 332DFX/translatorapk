@@ -139,6 +139,8 @@ fun SettingsScreen(
 
                     Text(
                         text = when (TranslationMode.fromId(settings.provider)) {
+                            TranslationMode.GOOGLE_FREE ->
+                                "Быстрый онлайн-перевод через Google Translate. Без ограничений и без ключа."
                             TranslationMode.AUTO ->
                                 "Сначала MyMemory — бесплатно и без ключа. Когда дневной лимит " +
                                     "закончится, приложение автоматически продолжит через ML Kit на телефоне."
